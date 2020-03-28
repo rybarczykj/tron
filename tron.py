@@ -3,14 +3,13 @@
 # cs 111 Titus Klinge
 #
 # A two player, one-keyboard clone of the classic arcade game TRON light cylces
-# implemented with Zelle's graphics library built as a final project for cs111
+# implemented with Zelle's graphics library as a final project for cs111
 #
 #TODO: Keep track of score
 #TODO: Allow caps lock keyboard presses for WASD
 #TODO: Implement 3 players or 4 players
 #TODO: Implement boost
 #TODO: Implement AI
-
 
 from graphics import *
 
@@ -44,11 +43,7 @@ class motorcycle:
         Faces the bike in the given direction based on the key given.
         Does not allow 180 degree or self turns
         """
-        # If the index of the key in keylist is 0, face 0
-        # If the index of the key in keylist is 1, face 90, etc
         new_dir = self.keylist.index(key) * 90
-
-        # No 180 degree turns and no self turns
         if new_dir % 180 == self.dir % 180:
             pass
         else:
@@ -63,10 +58,12 @@ class gameboard():
     """
     def __init__(self, size, coords):
         self.grid = []
-        self.size = size
         self.coords = coords
         self.win = GraphWin("TRON clone cs111", size, size, autoflush=False)
         self.win.setCoords(0, coords, coords, 0)
+
+        self.clear()
+        self.add_border()
 
     def fill_a_box(self, color, x, y):
         """
@@ -114,11 +111,8 @@ class gameboard():
         return banner
 
 def main():
-    """"
-    Main method instantiate objects, runs actual gametime logic
-    """
     size = 600 # Size of the window
-    coords = 90  # Scale of the window. AKA how many boxes wide.
+    coords = 99  # Scale of the window (how many boxes wide)
     board = gameboard(size, coords)
 
     b = board.announcement(
@@ -128,31 +122,24 @@ def main():
     b.undraw()
 
     restart = True
-    #Main game, loops to replay the game until the user exits
+
     try:
         while restart == True:
             board.clear()
             board.add_border()
 
-            #Initialize players
-            player1 = motorcycle("Red", ["d", "w", "a", "s", "space"], coords // 3, coords // 2)
-            player2 = motorcycle("Yellow", ["Right", "Up", "Left", "Down", "Return"], (2 * coords // 3)-1, coords // 2)
+            player1 = motorcycle("Red", ["d", "w", "a", "s"], coords // 3, coords // 2)
+            player2 = motorcycle("Yellow", ["Right", "Up", "Left", "Down"], (2 * coords // 3)-1, coords // 2)
             PLAYERS = [player1, player2]
 
-            #Live gameplay logic. Loops until 1 or fewer player alive
             while True:
-                key = board.win.checkKey()
-
-                # temporary copy of PLAYERS. allows removing players while still
-                # iterating through it
+                keypress = board.win.checkKey()
                 PLAYERS_COPY = PLAYERS[:]
                 for player in PLAYERS:
-                    # Check for turns
-                    if key in player.keylist:
-                        player.turn(key)
-
-                    # Move one upfield
                     player.move()
+
+                    if keypress in player.keylist:
+                        player.turn(keypress)
 
                     # If crashed
                     if board.grid[player.x][player.y] != 0:
@@ -162,10 +149,8 @@ def main():
                 if len(PLAYERS)-len(PLAYERS_COPY)>=1:
                     PLAYERS = PLAYERS_COPY
                     break
-                update(20)
+                update(30)
 
-
-            #If they both died or they ran right into eachother, its a tie
             if len(PLAYERS) == 0 or (player1.x == player2.x and player1.y == player2.y):
                 result_banner = board.announcement\
                     ("It's a tie! \n\n 'q' to quit \n 'r' to restart")
@@ -173,7 +158,6 @@ def main():
                 result_banner = board.announcement(PLAYERS[0].color +
                     " wins! \n\n 'q' to quit \n 'r' to restart")
 
-            #Loops to catch multiple keyboard inputs
             while True:
                 keypress = board.win.checkKey()
                 if keypress == "r":
@@ -182,8 +166,8 @@ def main():
                 elif keypress == 'q':
                     restart = False
                     break
-
     except GraphicsError:
         pass
+
 if __name__ == "__main__":
     main()
