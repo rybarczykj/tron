@@ -146,14 +146,14 @@ def main():
                         PLAYERS_COPY.remove(player)
                     else:
                         board.fill_a_box(player.color, player.x, player.y)
+                        
                 if len(PLAYERS)-len(PLAYERS_COPY)>=1:
                     PLAYERS = PLAYERS_COPY
                     break
                 update(30)
 
             if len(PLAYERS) == 0 or (player1.x == player2.x and player1.y == player2.y):
-                result_banner = board.announcement\
-                    ("It's a tie! \n\n 'q' to quit \n 'r' to restart")
+                result_banner = board.announcement("It's a tie! \n\n 'q' to quit \n 'r' to restart")
             else:
                 result_banner = board.announcement(PLAYERS[0].color +
                     " wins! \n\n 'q' to quit \n 'r' to restart")
