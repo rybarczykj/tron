@@ -1,35 +1,27 @@
-# tron.py
-# Jack Rybarczyk
-# cs 111 Titus Klinge
-#
-# A two player, one-keyboard clone of the classic arcade game TRON light cylces
-# implemented with Zelle's graphics library as a final project for cs111
-#
-# TODO: Keep track of score
-# TODO: Allow caps lock keyboard presses for WASD
-# TODO: Implement 3 players or 4 players?
-# TODO: Implement boost?
-# TODO: Implement AI
+import time
+import sys
 
-from graphics import *
+from curtsies import FullscreenWindow, Input, FSArray, fmtstr, fsarray
+from curtsies.fmtfuncs import (
+    bold,
+    yellow,
+    on_blue,
+    cyan,
+    on_yellow,
+    on_red,
+    black,
+)
+import curtsies.events
 
-class motorcycle:
-    """A motorcycle that drives and leaves a trail"""
 
-    def __init__(self, color, keylist, startX, startY):
-        self.color = color
-        self.keylist = keylist
+class Cycle:
+    def __init__(self, attr_dict):
+        self.appearance = attr_dict["appearance"]
+        self.x, self.y = attr_dict["x"], attr_dict["y"]
+        self.keylist = attr_dict["keys"]
         self.dir = 0
-        self.x = startX
-        self.y = startY
 
     def move(self, grid):
-        """
-        Updates the motorcycles x or y position by 1, depending
-        on which direction it's facing
-        
-        Grid isn't used in this superclass
-        """
         d = self.dir
         if d == 0:
             self.x += 1
@@ -40,167 +32,201 @@ class motorcycle:
         elif d == 270:
             self.y += 1
 
-    def takeInput(self, key):
+    def face(self, newdir):
+        """ turn to face the given direction """
+        if not (newdir % 180 == self.dir % 180):
+            self.dir = newdir
+
+    def paint(self, grid):
+        """ given a grid object, adds self to the grid and returns new grid
         """
-        Takes in a key input and calls takeTurn    
-        """
-        new_dir = self.keylist.index(key) * 90
-        if not (new_dir % 180 == self.dir % 180):
-            self.dir = new_dir
+        grid[self.y, self.x] = self.appearance
+        return grid
 
 
-class bot(motorcycle):
-    """
-    Dumb bot only turns left when about to crash
+class Bot(Cycle):
+    """ Dumb bot that only turns right when it's about to crash
     """
 
     def move(self, grid):
-        super().move(grid)
-        if self.getNextSquare(grid) != 0:
-            self.turnLeft()
 
-    def turnLeft(self):
-        self.dir = (self.dir + 90) % 360
+        a = self.getNextSquareCoords()
+        if grid[a[0], a[1]] != [" "]:
+            self.turnLeft()
+        super().move(grid)
 
     def turnRight(self):
         self.dir = (self.dir - 90) % 360
 
-    def getNextSquare(self, grid):
+    def turnLeft(self):
+        self.dir = (self.dir + 90) % 360
+
+    def getNextSquareCoords(self, n=2):
+        """ Returns the x, y coords of the box n spots in front of the bot.
         """
-        Returns the contents of the next box which will be visitedw
-        """
-        try:
-            if self.dir == 0:
-                return grid[self.x + 1][self.y]
-            elif self.dir == 90:
-                return grid[self.x][self.y - 1]
-            elif self.dir == 180:
-                return grid[self.x - 1][self.y]
-            else:
-                return grid[self.x][self.y + 1]
-        except IndexError:
-            return True
+        if self.dir == 0:
+            return (self.y, self.x + n)
+        elif self.dir == 90:
+            return (self.y - n, self.x)
+        elif self.dir == 180:
+            return (self.y, self.x - n)
+        else:
+            return (self.y + n, self.x)
 
 
-class gameboard():
-    """
-    Gameboard class manages the grid's visuals and data
-    Values in 2D array defaults 0, but change to the color if visited
-    represented as a string. Example "Red" or "White"
-    """
+class gameboard:
+    def __init__(self, width, height, players):
+        self.width = width
+        self.height = height
+        self.grid = FSArray(height, width)
 
-    def __init__(self, size, coords):
-        self.grid = []
-        self.coords = coords
-        self.win = GraphWin("TRON clone cs111", size, size, autoflush=False)
-        self.win.setCoords(0, coords, coords, 0)
+        self.players = players
+        self.numplayers = len(self.players)
 
-        self.clear()
-        self.add_border()
+    def draw_border(self):
+        """ draw outer border """
+        box = on_yellow(black(bold("!")))
+        for x in range(1, self.width):
+            self.grid[1, x] = box
+            self.grid[self.height - 1, x] = box
+        for y in range(1, self.height):
+            self.grid[y, 1] = box
+            self.grid[y, self.width - 1] = box
 
-    def fill_a_box(self, color, x, y):
-        """
-        Fills a single square, both visually and in the grid
-        """
-        r = Rectangle(Point(x, y), Point(x + 1, y + 1))
-        r.setFill(color)
-        r.draw(self.win)
-        self.grid[x][y] = color
+    def process_event(self, key):
+        if key == " ":
+            sys.exit()
 
-    def clear(self):
-        """
-        Draws a black background over everything and clears 2D array.
-        """
-        coords = self.coords
-        background = Rectangle(Point(0, 0), Point(coords, coords))
-        background.setFill("Black")
-        background.draw(self.win)
-        self.grid = [[0 for y in range(coords)] for x in range(coords)]
+        for player in self.players:
+            if key in player.keylist:
+                player.face(player.keylist[key])
+                return False
 
-    def add_border(self):
+    def tick(self):
+        """ Do one frame of work. Returns the winner if there 
+        is a crash
         """
-        Makes the white border
-        Calls: self.fill_a_box()
-        """
-        buffer = 0
-        edge = self.coords - buffer - 1
-        for x in range(buffer, edge + 1):
-            for y in range(buffer, edge + 1):
-                if (x == buffer or x == edge or y == buffer or y == edge):
-                    self.fill_a_box("White", x, y)
+        # list of players alive this frame
+        temp_players = self.players[:]
 
-    def announcement(self, message):
-        """
-        Creates and draws a banner with the input message.
-        Returns: The banner so that it can be undrawn
-        """
-        coords = self.coords
-        banner = Rectangle(Point(coords / 4, 2 * coords / 6), Point((3 * coords / 4), (4 * coords / 6)))
-        banner.setFill("White")
-        banner.draw(self.win)
+        for bike in self.players:
+            bike.move(self.grid)
 
-        message = Text(Point(coords / 2, coords / 2), message)
-        message.draw(self.win)
-        return banner
+            if self.grid[bike.y, bike.x] == [" "]:
+                self.grid[bike.y, bike.x] = bike.appearance
+            else:  # crashed
+                temp_players.remove(bike)
+                self.grid[bike.y, bike.x] = fmtstr("X", "red", "bold", "on_black")
+
+        if len(temp_players) == 0:
+            return "tie"
+        elif len(temp_players) < len(self.players):
+            return temp_players
+
+    def winner_msg(self, tick):
+        if len(tick) != 1:
+            msg = fmtstr("it's a tie!", "red")
+        else:
+            winner = tick[0]
+            winner_name = winner.appearance
+            msg = fmtstr("winner:", "yellow")
+            msg += " " + (winner_name * 5)
+        return msg
+
+
+class Frame(curtsies.events.ScheduledEvent):
+    pass
+
+
+def do_introduction(window):
+    h, w = window.height, window.width
+
+    messages = [
+            "two player tron",
+            fmtstr("player 1:", "on_blue", "cyan") + " wasd",
+            fmtstr("player 2:", "on_red", "yellow") + " arrow keys",
+        ]
+
+    billboard = FSArray(h, w)
+    msg_row = h // 2 - 2
+    for msg in messages:
+        billboard[
+            msg_row, w // 2 - len(msg) // 2 : w // 2 + len(msg) // 2 + 1
+        ] = fsarray([msg])
+        msg_row += 1
+    window.render_to_terminal(billboard)
+
+    # countdown msg
+    for i in range(3, 0, -1):
+        billboard[msg_row, w // 2] = fmtstr(str(i), "red")
+        window.render_to_terminal(billboard)
+        time.sleep(1)
+
+
+def mainloop(window, p2_bot=False):
+    p1_attrs = {
+        "appearance": on_blue((cyan("1"))),
+        "x": window.width // 4,
+        "y": window.height // 2,
+        "keys": {"w": 90, "a": 180, "s": 270, "d": 0},
+    }
+
+    p2_attrs = {
+        "appearance": on_red((yellow("2"))),
+        "x": 3 * window.width // 4,
+        "y": window.height // 2,
+        "keys": {"<UP>": 90, "<LEFT>": 180, "<DOWN>": 270, "<RIGHT>": 0},
+    }
+
+    FPS = 15
+
+    players = [Cycle(p1_attrs), Cycle(p2_attrs)]
+    if p2_bot: # make p2 a bot
+        players[1] = Bot(p2_attrs)
+
+    world = gameboard(window.width, window.height, players)
+    dt = 1 / FPS
+    world.draw_border()
+    window.render_to_terminal(world.grid)
+
+    reactor = Input()
+    schedule_next_frame = reactor.scheduled_event_trigger(Frame)
+    schedule_next_frame(when=time.time())
+    with reactor:
+        for c in reactor:
+            if isinstance(c, Frame):
+                tick = world.tick()
+                window.render_to_terminal(world.grid)
+                if not tick:  # if no crashes
+                    when = c.when + dt
+                    while when < time.time():
+                        when += dt
+                    schedule_next_frame(when)
+                else:  # if crashed
+                    world.grid[0:4, 0:25] = fsarray(
+                        [
+                            world.winner_msg(tick),
+                            "r to restart",
+                            "q to quit",
+                            "b to make player 2 a bot",
+                        ]
+                    )
+                    window.render_to_terminal(world.grid)
+            elif c.lower() in ["r", "q", "b"]:
+                break
+            else:  # common case
+                world.process_event(c)
+    if c.lower() == "r":
+        mainloop(window, p2_bot)
+    elif c.lower() == "b":
+        mainloop(window, True)
 
 
 def main():
-    size = 600  # Size of the window
-    coords = 99  # Scale of the window (how many boxes wide)
-    board = gameboard(size, coords)
-    b = board.announcement(
-        "TRON clone \n Jack Rybarczyk \n cs 111 \n \n "
-        "press any key to start \n \n Red: wasd \n Yellow: arrow keys")
-    board.win.getKey()
-    b.undraw()
+    with FullscreenWindow(sys.stdout) as window:
+        do_introduction(window)
 
-    restart = True
-    try:
-        while restart:
-            board.clear()
-            board.add_border()
-
-            player1 = motorcycle("Red", ["d", "w", "a", "s"], coords // 3, coords // 2)
-            player2 = bot("Yellow", ["Right", "Up", "Left", "Down"], (2 * coords // 3) - 1, coords // 2)
-            PLAYERS = [player1, player2]
-
-            while True:
-                keys = board.win.checkKeys()
-                PLAYERS_TEMP = PLAYERS[:]
-                for player in PLAYERS:
-                    player.move(board.grid)
-
-                    for key in keys:
-                        if key in player.keylist:
-                            player.takeInput(key)
-
-                    # If crashed
-                    if board.grid[player.x][player.y] != 0:
-                        PLAYERS_TEMP.remove(player)
-                    else:
-                        board.fill_a_box(player.color, player.x, player.y)
-
-                if len(PLAYERS) - len(PLAYERS_TEMP) >= 1:
-                    PLAYERS = PLAYERS_TEMP
-                    break
-                update(30)
-            if len(PLAYERS) == 0 or (player1.x == player2.x and player1.y == player2.y):
-                result_banner = board.announcement \
-                    ("It's a tie! \n\n 'q' to quit \n 'r' to restart")
-            else:
-                result_banner = board.announcement(PLAYERS[0].color +
-                                                   " wins! \n\n 'q' to quit \n 'r' to restart")
-            while True:
-                key = board.win.checkKey()
-                if key == "r":
-                    result_banner.undraw()
-                    break
-                elif key == 'q':
-                    restart = False
-                    break
-                update(30)
-    except GraphicsError:
-        pass
+        mainloop(window)
 
 
 if __name__ == "__main__":
